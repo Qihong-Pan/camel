@@ -13,12 +13,10 @@
 # ========= Copyright 2023-2024 @ CAMEL-AI.org. All Rights Reserved. =========
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import textwrap
 import threading
-import time
 import uuid
 from collections import defaultdict
 from pathlib import Path
@@ -177,9 +175,6 @@ class ChatAgent(BaseAgent):
             terminate its execution. (default: :obj:`None`)
         mask_tool_output (Optional[bool]): Whether to return a sanitized
             placeholder instead of the raw tool output. (default: :obj:`False`)
-        pause_event (Optional[asyncio.Event]): Event to signal pause of the
-            agent's operation. When clear, the agent will pause its execution.
-            (default: :obj:`None`)
     """
 
     def __init__(
@@ -214,7 +209,6 @@ class ChatAgent(BaseAgent):
         agent_id: Optional[str] = None,
         stop_event: Optional[threading.Event] = None,
         mask_tool_output: bool = False,
-        pause_event: Optional[asyncio.Event] = None,
     ) -> None:
         if isinstance(model, ModelManager):
             self.model_backend = model
@@ -291,7 +285,6 @@ class ChatAgent(BaseAgent):
         self.stop_event = stop_event
         self.mask_tool_output = mask_tool_output
         self._secure_result_store: Dict[str, Any] = {}
-        self.pause_event = pause_event
 
     def reset(self):
         r"""Resets the :obj:`ChatAgent` to its initial state."""
@@ -1155,10 +1148,6 @@ class ChatAgent(BaseAgent):
         iteration_count = 0
 
         while True:
-            if self.pause_event is not None and not self.pause_event.is_set():
-                while not self.pause_event.is_set():
-                    time.sleep(0.001)
-
             try:
                 openai_messages, num_tokens = self.memory.get_context()
                 accumulated_context_tokens += num_tokens
@@ -1200,12 +1189,6 @@ class ChatAgent(BaseAgent):
                             external_tool_call_requests = []
                         external_tool_call_requests.append(tool_call_request)
                     else:
-                        if (
-                            self.pause_event is not None
-                            and not self.pause_event.is_set()
-                        ):
-                            while not self.pause_event.is_set():
-                                time.sleep(0.001)
                         tool_call_records.append(
                             self._execute_tool(tool_call_request)
                         )
@@ -1309,8 +1292,6 @@ class ChatAgent(BaseAgent):
         step_token_usage = self._create_token_usage_tracker()
         iteration_count = 0
         while True:
-            if self.pause_event is not None and not self.pause_event.is_set():
-                await self.pause_event.wait()
             try:
                 openai_messages, num_tokens = self.memory.get_context()
                 accumulated_context_tokens += num_tokens
@@ -1352,11 +1333,6 @@ class ChatAgent(BaseAgent):
                             external_tool_call_requests = []
                         external_tool_call_requests.append(tool_call_request)
                     else:
-                        if (
-                            self.pause_event is not None
-                            and not self.pause_event.is_set()
-                        ):
-                            await self.pause_event.wait()
                         tool_call_record = await self._aexecute_tool(
                             tool_call_request
                         )
@@ -2197,7 +2173,6 @@ class ChatAgent(BaseAgent):
             ),
             max_iteration=self.max_iteration,
             stop_event=self.stop_event,
-            pause_event=self.pause_event,
         )
 
         # Copy memory if requested
@@ -2358,3 +2333,75 @@ class ChatAgent(BaseAgent):
         mcp_server.tool()(get_available_tools)
 
         return mcp_server
+
+
+    @dependencies_required("a2a")
+    def to_a2a(
+        self,
+        name: str = "CAMEL-ChatAgent",
+        description: str = "A helpful assistant using the CAMEL AI framework.",
+        host: str = "localhost",
+        port: int = 18000,
+        version: str="1.0.0",
+    ):
+        from a2a.types import (
+            AgentCapabilities,
+            AgentCard,
+            AgentSkill,
+        )
+        import httpx
+        from a2a.server.request_handlers import DefaultRequestHandler
+        from a2a.server.tasks import InMemoryTaskStore, InMemoryPushNotifier
+        from a2a.server.apps import A2AStarletteApplication
+        import uvicorn
+        from camel.agents.agent_executor import CamelAgentExecutor
+
+        SUPPORTED_CONTENT_TYPES=["text", "text/plain"]
+
+        skills = []
+        # Create skills
+        for name, tool in self.tool_dict.items():
+            skills.append(
+                AgentSkill(
+                    id=name,
+                    name=name,
+                    description=tool.get_function_description() or "",
+                    tags=[name],
+                    examples=["input parameters:"+str(tool.parameters.items())]
+                )
+            )
+        capabilities = AgentCapabilities(streaming=False, pushNotifications=True)
+
+        # Create agent card
+        agent_card = AgentCard(
+            name=name,
+            description=description,
+            url=f"http://{host}:{port}/",
+            version=version,
+            defaultInputModes=SUPPORTED_CONTENT_TYPES,
+            defaultOutputModes=SUPPORTED_CONTENT_TYPES,
+            capabilities=capabilities,
+            skills=skills,
+        )
+
+        httpx_client = httpx.AsyncClient()
+        request_handler = DefaultRequestHandler(
+            agent_executor=CamelAgentExecutor(self.astep),
+            task_store=InMemoryTaskStore(),
+            push_notifier=InMemoryPushNotifier(httpx_client),
+        )
+        a2a_server = A2AStarletteApplication(
+            agent_card=agent_card, http_handler=request_handler
+        )
+
+        # Create a class to start the server
+        class A2AServer:
+            def __init__(self, host, port, server):
+                self.host = host
+                self.port = port
+                self.server = server
+
+            def run(self):
+                uvicorn.run(self.server.build(), host=self.host, port=self.port)
+
+        return A2AServer(host, port, a2a_server)
