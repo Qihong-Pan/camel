@@ -2353,8 +2353,7 @@ class ChatAgent(BaseAgent):
         from a2a.server.request_handlers import DefaultRequestHandler
         from a2a.server.tasks import InMemoryTaskStore, InMemoryPushNotifier
         from a2a.server.apps import A2AStarletteApplication
-        import uvicorn
-        from camel.agents.agent_executor import CamelAgentExecutor
+        from camel.agents._utils import CamelAgentExecutor,A2AServer
 
         SUPPORTED_CONTENT_TYPES=["text", "text/plain"]
 
@@ -2386,22 +2385,12 @@ class ChatAgent(BaseAgent):
 
         httpx_client = httpx.AsyncClient()
         request_handler = DefaultRequestHandler(
-            agent_executor=CamelAgentExecutor(self.astep),
+            agent_executor=CamelAgentExecutor(self),
             task_store=InMemoryTaskStore(),
             push_notifier=InMemoryPushNotifier(httpx_client),
         )
         a2a_server = A2AStarletteApplication(
             agent_card=agent_card, http_handler=request_handler
         )
-
-        # Create a class to start the server
-        class A2AServer:
-            def __init__(self, host, port, server):
-                self.host = host
-                self.port = port
-                self.server = server
-
-            def run(self):
-                uvicorn.run(self.server.build(), host=self.host, port=self.port)
 
         return A2AServer(host, port, a2a_server)

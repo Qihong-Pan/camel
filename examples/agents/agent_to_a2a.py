@@ -33,9 +33,10 @@ os.makedirs(output_dir, exist_ok=True)
 file_toolkit = FileWriteToolkit(output_dir=output_dir)
 
 # Get the tools from the toolkit
-tools_list = [*SearchToolkit().get_tools(),
-              *file_toolkit.get_tools(),
-              *WeatherToolkit().get_tools(),
+tools_list = [
+    *SearchToolkit().get_tools(),
+    *file_toolkit.get_tools(),
+    *WeatherToolkit().get_tools(),
 ]
 
 agent = ChatAgent("You are a helpful assistant.", model=model,tools=tools_list)
