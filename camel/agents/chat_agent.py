@@ -2353,7 +2353,7 @@ class ChatAgent(BaseAgent):
         from a2a.server.request_handlers import DefaultRequestHandler
         from a2a.server.tasks import InMemoryTaskStore, InMemoryPushNotifier
         from a2a.server.apps import A2AStarletteApplication
-        from camel.agents._utils import CamelAgentExecutor,A2AServer
+        from camel.utils.a2a import ChatAgentExecutor,A2AServer
 
         SUPPORTED_CONTENT_TYPES=["text", "text/plain"]
 
@@ -2385,7 +2385,7 @@ class ChatAgent(BaseAgent):
 
         httpx_client = httpx.AsyncClient()
         request_handler = DefaultRequestHandler(
-            agent_executor=CamelAgentExecutor(self),
+            agent_executor=ChatAgentExecutor(self),
             task_store=InMemoryTaskStore(),
             push_notifier=InMemoryPushNotifier(httpx_client),
         )

@@ -16,16 +16,10 @@ import logging
 import re
 import textwrap
 from typing import Any, Callable, Dict, List, Optional, Union
-import uvicorn
 from camel.agents._types import ToolCallRequest
 from camel.toolkits import FunctionTool
 from camel.types import Choice
 from camel.types.agents import ToolCallingRecord
-from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.events import EventQueue
-from a2a.server.tasks import TaskUpdater
-from a2a.utils import new_agent_text_message
-from a2a.utils.errors import ServerError
 
 logger = logging.getLogger(__name__)
 
@@ -191,53 +185,3 @@ def handle_logprobs(choice: Choice) -> Optional[List[Dict[str, Any]]]:
         }
         for token_logprob in tokens_logprobs
     ]
-
-
-class A2AServer:
-    """
-    Provides a consistent interface with the `to_mcp()` method,
-    enabling the initialization of agent-based servers in a uniform manner.
-
-    Example:
-        server = agent.to_a2a()
-        server.run()  # Consistent invocation pattern with to_mcp()
-    """
-
-    def __init__(self, host, port, server):
-        self.host = host
-        self.port = port
-        self.server = server
-
-    def run(self):
-        uvicorn.run(self.server.build(), host=self.host, port=self.port)
-
-
-
-class CamelAgentExecutor(AgentExecutor):
-    def __init__(self, agent_instance ):
-        self.agent_instance = agent_instance
-    async def execute(
-        self,
-        context: RequestContext,
-        event_queue: EventQueue,
-    ) -> None:
-        try:
-            if not context.message:
-                raise Exception('No message provided')
-
-            query = context.get_user_input()
-
-            # updater = TaskUpdater(event_queue, context.task_id, context.context_id)
-
-            format_cls = None
-
-            response = await self.agent_instance.astep(query, format_cls)
-            await event_queue.enqueue_event(new_agent_text_message(str(response), context.context_id, context.task_id))
-        except Exception as e:
-            print("Error invoking agent: %s", e)
-            raise ServerError(error=ValueError(f"Error invoking agent: {e}")) from e
-
-    async def cancel(
-        self, context: RequestContext, event_queue: EventQueue
-    ) -> None:
-        raise Exception('cancel not supported')

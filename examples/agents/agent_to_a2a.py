@@ -23,7 +23,7 @@ from camel.types import ModelPlatformType, ModelType
 model = ModelFactory.create(
     model_platform=ModelPlatformType.QWEN,
     model_type=ModelType.QWEN_2_5_32B,
-    api_key="",
+    api_key="sk-523e120716cb4917906f1d2a6a58456a",
 )
 # Set up output directory
 output_dir = "./file_write_outputs"
@@ -34,9 +34,9 @@ file_toolkit = FileWriteToolkit(output_dir=output_dir)
 
 # Get the tools from the toolkit
 tools_list = [
-    *SearchToolkit().get_tools(),
+    # *SearchToolkit().get_tools(),
     *file_toolkit.get_tools(),
-    *WeatherToolkit().get_tools(),
+    # *WeatherToolkit().get_tools(),
 ]
 
 agent = ChatAgent("You are a helpful assistant.", model=model,tools=tools_list)
